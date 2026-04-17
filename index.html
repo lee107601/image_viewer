@@ -138,6 +138,7 @@
       box-shadow: 0 20px 80px rgba(0,0,0,.8);
       animation: pop .22s ease;
       user-select: none; pointer-events: none;
+      transition: filter .25s;
     }
     @keyframes pop { from { transform: scale(.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
@@ -238,7 +239,7 @@
       const res = await fetch('photos.json');
       if (!res.ok) throw new Error();
       const list = await res.json();   // string[] of filenames
-      photos = list.map(name => ({ src: 'photos/' + name, name }));
+      photos = list.map(name => ({ src: 'photos/' + name, thumb: 'thumbs/' + name, name }));
       statusEl.classList.add('hidden');
       renderGallery();
     } catch {
@@ -256,7 +257,7 @@
       const card = document.createElement('div');
       card.className = 'card';
       card.innerHTML = `
-        <img src="${img.src}" alt="${img.name}" loading="lazy" />
+        <img src="${img.thumb}" alt="${img.name}" loading="lazy" />
         <div class="card-overlay"><div class="card-name">${img.name}</div></div>`;
       card.querySelector('img').onload = e => e.target.classList.add('loaded');
       card.addEventListener('click', () => openLightbox(i));
@@ -291,8 +292,13 @@
   }
   function showLb() {
     const img = photos[lbIndex];
-    lbImg.src = img.src; lbImg.alt = img.name;
     lbInfo.textContent = `${lbIndex + 1} / ${photos.length}  ·  ${img.name}`;
+    // 썸네일 먼저 표시 후 원본으로 교체
+    lbImg.src = img.thumb;
+    lbImg.style.filter = 'blur(4px)';
+    const full = new Image();
+    full.onload = () => { lbImg.src = img.src; lbImg.style.filter = ''; };
+    full.src = img.src;
   }
 
   document.getElementById('lb-prev').onclick  = () => { lbIndex = (lbIndex - 1 + photos.length) % photos.length; showLb(); };
