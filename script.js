@@ -8,9 +8,16 @@ const FIREBASE_CONFIG = {
   measurementId: "G-5WK75MTMSE"
 };
 
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   🔧 Cloudinary 설정 (본인 값으로 교체)
+   cloudinary.com → Settings → Upload → Upload presets
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+const CLOUDINARY_CLOUD  = 'YOUR_CLOUD_NAME';
+const CLOUDINARY_PRESET = 'YOUR_UPLOAD_PRESET';
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
 firebase.initializeApp(FIREBASE_CONFIG);
-const db      = firebase.firestore();
-const storage = firebase.storage();
+const db = firebase.firestore();
 
 /* ── DOM ── */
 const gallery      = document.getElementById('gallery');
@@ -113,7 +120,7 @@ document.querySelectorAll('.cols-btn button').forEach(btn => {
 });
 
 /* ── 업로드 ── */
-function compressImage(file, maxPx, quality = 0.82) {
+function compressImage(file, maxPx, quality = 0.85) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -137,14 +144,30 @@ function compressImage(file, maxPx, quality = 0.82) {
   });
 }
 
-async function uploadToStorage(ref, blob) {
-  const task = ref.put(blob, { contentType: 'image/jpeg' });
-  task.on('state_changed', snap => {
-    if (snap.totalBytes > 0)
-      setBar(Math.round(snap.bytesTransferred / snap.totalBytes * 100));
+function cloudinaryThumb(url) {
+  // Cloudinary URL 변환으로 썸네일 생성 (서버에서 자동 리사이즈)
+  return url.replace('/upload/', '/upload/w_600,c_limit,q_80,f_auto/');
+}
+
+function uploadToCloudinary(blob) {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append('file', blob);
+    form.append('upload_preset', CLOUDINARY_PRESET);
+
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable) setBar(Math.round(e.loaded / e.total * 100));
+    };
+    xhr.onload = () => {
+      const res = JSON.parse(xhr.responseText);
+      if (xhr.status === 200) resolve(res.secure_url);
+      else reject(new Error(res.error?.message || '업로드 실패'));
+    };
+    xhr.onerror = () => reject(new Error('네트워크 오류'));
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`);
+    xhr.send(form);
   });
-  await task;
-  return ref.getDownloadURL();
 }
 
 document.getElementById('fab').addEventListener('click', () => {
@@ -167,25 +190,16 @@ uploadInput.addEventListener('change', async e => {
     setBar(0);
 
     try {
-      const key = `${Date.now()}_${file.name.replace(/[^\w.\-]/g, '_')}`;
+      // 원본만 압축 후 Cloudinary에 업로드 (썸네일은 URL 변환으로 자동 생성)
+      const blob = await compressImage(file, 1800);
 
-      // 압축
-      const [thumbBlob, fullBlob] = await Promise.all([
-        compressImage(file, 600),
-        compressImage(file, 1800, 0.88),
-      ]);
+      uploadStatus.textContent = `(${i + 1}/${files.length}) 업로드 중...`;
+      const srcUrl   = await uploadToCloudinary(blob);
+      const thumbUrl = cloudinaryThumb(srcUrl);
 
-      // 썸네일 업로드
-      uploadStatus.textContent = `(${i + 1}/${files.length}) 썸네일 업로드 중...`;
-      const thumbUrl = await uploadToStorage(storage.ref(`thumbs/${key}`), thumbBlob);
-
-      // 원본 업로드
-      uploadStatus.textContent = `(${i + 1}/${files.length}) 원본 업로드 중...`;
-      const fullUrl = await uploadToStorage(storage.ref(`photos/${key}`), fullBlob);
-
-      // Firestore 저장
+      // Firestore에 URL 저장
       await db.collection('uploads').add({
-        src: fullUrl, thumb: thumbUrl,
+        src: srcUrl, thumb: thumbUrl,
         name: file.name,
         ts: firebase.firestore.FieldValue.serverTimestamp()
       });
@@ -195,10 +209,7 @@ uploadInput.addEventListener('change', async e => {
 
     } catch (err) {
       console.error('업로드 실패:', err);
-      const msg = err.code === 'storage/unauthorized'
-        ? 'Firebase Storage 규칙을 허용으로 변경하세요.'
-        : err.message;
-      uploadStatus.textContent = `⚠ 오류: ${msg}`;
+      uploadStatus.textContent = `⚠ 오류: ${err.message}`;
       await delay(3000);
     }
   }
