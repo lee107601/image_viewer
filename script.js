@@ -91,7 +91,7 @@ function renderGallery() {
       : `<img src="${img.thumb}" alt="${esc(img.name)}" loading="lazy" />`;
     card.innerHTML = `
       ${mediaEl}
-      <div class="card-overlay"><div class="card-name">${esc(img.name)}</div></div>
+      <div class="card-overlay"></div>
       <div class="card-badge" id="badge-${i}">💬 <span>0</span></div>`;
     if (isVideo) {
       const v = card.querySelector('video');
@@ -301,7 +301,7 @@ window.addEventListener('popstate', () => {
 
 function showLb() {
   const img = photos[lbIndex];
-  lbTitle.textContent   = img.name;
+  lbTitle.textContent   = '';
   lbCounter.textContent = `${lbIndex + 1} / ${photos.length}`;
   lbMsg.value = '';
   document.getElementById('lb-delete').classList.toggle('hidden', img.type !== 'upload');
