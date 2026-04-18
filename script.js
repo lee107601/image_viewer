@@ -137,18 +137,14 @@ function compressImage(file, maxPx, quality = 0.82) {
   });
 }
 
-function uploadToStorage(ref, blob) {
-  return new Promise((resolve, reject) => {
-    const task = ref.put(blob, { contentType: 'image/jpeg' });
-    task.on('state_changed',
-      snap => {
-        const pct = Math.round(snap.bytesTransferred / snap.totalBytes * 100);
-        setBar(pct);
-      },
-      err => reject(err),
-      () => resolve(task.snapshot.ref.getDownloadURL())
-    );
+async function uploadToStorage(ref, blob) {
+  const task = ref.put(blob, { contentType: 'image/jpeg' });
+  task.on('state_changed', snap => {
+    if (snap.totalBytes > 0)
+      setBar(Math.round(snap.bytesTransferred / snap.totalBytes * 100));
   });
+  await task;
+  return ref.getDownloadURL();
 }
 
 document.getElementById('fab').addEventListener('click', () => {
