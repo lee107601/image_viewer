@@ -12,8 +12,8 @@ const FIREBASE_CONFIG = {
    🔧 Cloudinary 설정 (본인 값으로 교체)
    cloudinary.com → Settings → Upload → Upload presets
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-const CLOUDINARY_CLOUD  = 'YOUR_CLOUD_NAME';
-const CLOUDINARY_PRESET = 'YOUR_UPLOAD_PRESET';
+const CLOUDINARY_CLOUD  = 'dyvndewhe';
+const CLOUDINARY_PRESET = 'imageviewer';
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
 firebase.initializeApp(FIREBASE_CONFIG);
