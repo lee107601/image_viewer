@@ -156,7 +156,7 @@ function cloudinaryVideoThumb(url) {
     .replace(/\.[^.]+$/, '.jpg');
 }
 
-function uploadToCloudinary(file, resourceType = 'image') {
+function uploadToCloudinary(file) {
   return new Promise((resolve, reject) => {
     const form = new FormData();
     form.append('file', file);
@@ -172,7 +172,7 @@ function uploadToCloudinary(file, resourceType = 'image') {
       else reject(new Error(res.error?.message || '업로드 실패'));
     };
     xhr.onerror = () => reject(new Error('네트워크 오류'));
-    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/${resourceType}/upload`);
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/auto/upload`);
     xhr.send(form);
   });
 }
@@ -206,13 +206,13 @@ uploadInput.addEventListener('change', async e => {
           continue;
         }
         uploadStatus.textContent = `(${i + 1}/${files.length}) 동영상 업로드 중... ${file.name}`;
-        srcUrl   = await uploadToCloudinary(file, 'video');
+        srcUrl   = await uploadToCloudinary(file);
         thumbUrl = cloudinaryVideoThumb(srcUrl);
       } else {
         uploadStatus.textContent = `(${i + 1}/${files.length}) 압축 중... ${file.name}`;
         const blob = await compressImage(file, 1800);
         uploadStatus.textContent = `(${i + 1}/${files.length}) 업로드 중...`;
-        srcUrl   = await uploadToCloudinary(blob, 'image');
+        srcUrl   = await uploadToCloudinary(blob);
         thumbUrl = cloudinaryThumb(srcUrl);
       }
 
