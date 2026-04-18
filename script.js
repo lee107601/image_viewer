@@ -164,7 +164,7 @@ function cloudinaryVideoThumb(url) {
 }
 
 function cloudinaryVideoPreview(url) {
-  return url.replace('/upload/', '/upload/w_400,c_limit,q_30,vc_auto/');
+  return url.replace('/upload/', '/upload/w_700,c_limit,q_65,vc_auto/');
 }
 
 function uploadToCloudinary(file) {
