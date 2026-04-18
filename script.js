@@ -280,15 +280,21 @@ function openLightbox(i) {
   lightbox.classList.add('open');
   document.body.style.overflow = 'hidden';
   lbName.value = localStorage.getItem('lb-name') || '';
+  history.pushState({ lightbox: true }, '');
 }
 
-function closeLightbox() {
+function closeLightbox(fromPopstate = false) {
   if (unsubFn) { unsubFn(); unsubFn = null; }
   lbVideo.pause();
   lbVideo.src = '';
   lightbox.classList.remove('open');
   document.body.style.overflow = '';
+  if (!fromPopstate && history.state?.lightbox) history.back();
 }
+
+window.addEventListener('popstate', () => {
+  if (lightbox.classList.contains('open')) closeLightbox(true);
+});
 
 function showLb() {
   const img = photos[lbIndex];
