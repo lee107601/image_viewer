@@ -33,6 +33,7 @@ const lbComments   = document.getElementById('lb-comments');
 const lbName       = document.getElementById('lb-name');
 const lbMsg        = document.getElementById('lb-msg');
 const lbSend       = document.getElementById('lb-send');
+const lbVideo      = document.getElementById('lb-video');
 const uploadModal  = document.getElementById('upload-modal');
 const uploadInput  = document.getElementById('upload-input');
 const uploadProgress = document.getElementById('upload-progress');
@@ -87,7 +88,8 @@ function renderGallery() {
     card.innerHTML = `
       <img src="${img.thumb}" alt="${esc(img.name)}" loading="lazy" />
       <div class="card-overlay"><div class="card-name">${esc(img.name)}</div></div>
-      <div class="card-badge" id="badge-${i}">💬 <span>0</span></div>`;
+      <div class="card-badge" id="badge-${i}">💬 <span>0</span></div>
+      ${img.mediaType === 'video' ? '<div class="card-play">▶</div>' : ''}`;
     card.querySelector('img').onload = e => e.target.classList.add('loaded');
     card.addEventListener('click', () => openLightbox(i));
     gallery.appendChild(card);
@@ -145,14 +147,19 @@ function compressImage(file, maxPx, quality = 0.85) {
 }
 
 function cloudinaryThumb(url) {
-  // Cloudinary URL 변환으로 썸네일 생성 (서버에서 자동 리사이즈)
   return url.replace('/upload/', '/upload/w_600,c_limit,q_80,f_auto/');
 }
 
-function uploadToCloudinary(blob) {
+function cloudinaryVideoThumb(url) {
+  return url
+    .replace('/video/upload/', '/video/upload/w_600,c_limit,q_80,f_auto,so_0/')
+    .replace(/\.[^.]+$/, '.jpg');
+}
+
+function uploadToCloudinary(file, resourceType = 'image') {
   return new Promise((resolve, reject) => {
     const form = new FormData();
-    form.append('file', blob);
+    form.append('file', file);
     form.append('upload_preset', CLOUDINARY_PRESET);
 
     const xhr = new XMLHttpRequest();
@@ -165,7 +172,7 @@ function uploadToCloudinary(blob) {
       else reject(new Error(res.error?.message || '업로드 실패'));
     };
     xhr.onerror = () => reject(new Error('네트워크 오류'));
-    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`);
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/${resourceType}/upload`);
     xhr.send(form);
   });
 }
@@ -186,21 +193,33 @@ uploadInput.addEventListener('change', async e => {
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    uploadStatus.textContent = `(${i + 1}/${files.length}) 압축 중... ${file.name}`;
+    const isVideo = file.type.startsWith('video/');
     setBar(0);
 
     try {
-      // 원본만 압축 후 Cloudinary에 업로드 (썸네일은 URL 변환으로 자동 생성)
-      const blob = await compressImage(file, 1800);
+      let srcUrl, thumbUrl;
 
-      uploadStatus.textContent = `(${i + 1}/${files.length}) 업로드 중...`;
-      const srcUrl   = await uploadToCloudinary(blob);
-      const thumbUrl = cloudinaryThumb(srcUrl);
+      if (isVideo) {
+        if (file.size > 200 * 1024 * 1024) {
+          uploadStatus.textContent = `⚠ 동영상이 너무 큽니다 (최대 200MB): ${file.name}`;
+          await delay(2500);
+          continue;
+        }
+        uploadStatus.textContent = `(${i + 1}/${files.length}) 동영상 업로드 중... ${file.name}`;
+        srcUrl   = await uploadToCloudinary(file, 'video');
+        thumbUrl = cloudinaryVideoThumb(srcUrl);
+      } else {
+        uploadStatus.textContent = `(${i + 1}/${files.length}) 압축 중... ${file.name}`;
+        const blob = await compressImage(file, 1800);
+        uploadStatus.textContent = `(${i + 1}/${files.length}) 업로드 중...`;
+        srcUrl   = await uploadToCloudinary(blob, 'image');
+        thumbUrl = cloudinaryThumb(srcUrl);
+      }
 
-      // Firestore에 URL 저장
       await db.collection('uploads').add({
         src: srcUrl, thumb: thumbUrl,
         name: file.name,
+        mediaType: isVideo ? 'video' : 'image',
         ts: firebase.firestore.FieldValue.serverTimestamp()
       });
 
@@ -254,6 +273,8 @@ function openLightbox(i) {
 
 function closeLightbox() {
   if (unsubFn) { unsubFn(); unsubFn = null; }
+  lbVideo.pause();
+  lbVideo.src = '';
   lightbox.classList.remove('open');
   document.body.style.overflow = '';
 }
@@ -263,12 +284,22 @@ function showLb() {
   lbTitle.textContent   = img.name;
   lbCounter.textContent = `${lbIndex + 1} / ${photos.length}`;
   lbMsg.value = '';
+  document.getElementById('lb-delete').classList.toggle('hidden', img.type !== 'upload');
 
-  lbImg.src = img.thumb;
-  lbImg.style.filter = 'blur(4px)';
-  const full = new Image();
-  full.onload = () => { lbImg.src = img.src; lbImg.style.filter = ''; };
-  full.src = img.src;
+  const isVideo = img.mediaType === 'video';
+  lbImg.classList.toggle('hidden', isVideo);
+  lbVideo.classList.toggle('hidden', !isVideo);
+
+  if (isVideo) {
+    lbVideo.src = img.src;
+    lbVideo.poster = img.thumb;
+  } else {
+    lbImg.src = img.thumb;
+    lbImg.style.filter = 'blur(4px)';
+    const full = new Image();
+    full.onload = () => { lbImg.src = img.src; lbImg.style.filter = ''; };
+    full.src = img.src;
+  }
 
   subscribeComments(img.name);
 }
@@ -328,12 +359,25 @@ lbSend.addEventListener('click', sendComment);
 lbMsg.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) sendComment(); });
 
 /* ── 네비게이션 ── */
-function prevPhoto() { lbIndex = (lbIndex - 1 + photos.length) % photos.length; showLb(); }
-function nextPhoto() { lbIndex = (lbIndex + 1) % photos.length; showLb(); }
+function prevPhoto() { lbVideo.pause(); lbIndex = (lbIndex - 1 + photos.length) % photos.length; showLb(); }
+function nextPhoto() { lbVideo.pause(); lbIndex = (lbIndex + 1) % photos.length; showLb(); }
 
-document.getElementById('lb-prev').onclick  = prevPhoto;
-document.getElementById('lb-next').onclick  = nextPhoto;
-document.getElementById('lb-close').onclick = closeLightbox;
+async function deletePhoto() {
+  const img = photos[lbIndex];
+  if (img.type !== 'upload') return;
+  if (!confirm(`"${img.name}" 사진을 삭제할까요?`)) return;
+  try {
+    await db.collection('uploads').doc(img.id).delete();
+    closeLightbox();
+  } catch (err) {
+    alert('삭제 실패: ' + err.message);
+  }
+}
+
+document.getElementById('lb-prev').onclick   = prevPhoto;
+document.getElementById('lb-next').onclick   = nextPhoto;
+document.getElementById('lb-close').onclick  = closeLightbox;
+document.getElementById('lb-delete').onclick = deletePhoto;
 
 document.addEventListener('keydown', e => {
   if (!lightbox.classList.contains('open')) return;

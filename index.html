@@ -46,6 +46,7 @@
     <div id="lb-image-wrap">
       <button class="lb-nav" id="lb-prev">‹</button>
       <img id="lb-img" src="" alt="" draggable="false" />
+      <video id="lb-video" controls playsinline class="hidden"></video>
       <button class="lb-nav" id="lb-next">›</button>
     </div>
 
@@ -54,6 +55,7 @@
       <div id="lb-panel-header">
         <span id="lb-title"></span>
         <span id="lb-counter"></span>
+        <button id="lb-delete" title="사진 삭제">🗑</button>
         <button id="lb-close">✕</button>
       </div>
       <div id="lb-comments">
@@ -71,7 +73,7 @@
 
 <!-- FAB 업로드 버튼 -->
 <button id="fab" title="사진 추가">＋</button>
-<input type="file" id="upload-input" accept="image/*" multiple style="display:none" />
+<input type="file" id="upload-input" accept="image/*,video/*" multiple style="display:none" />
 
 <!-- 업로드 모달 -->
 <div id="upload-modal">
