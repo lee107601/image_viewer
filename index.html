@@ -69,9 +69,25 @@
   </div>
 </div>
 
+<!-- FAB 업로드 버튼 -->
+<button id="fab" title="사진 추가">＋</button>
+<input type="file" id="upload-input" accept="image/*" multiple style="display:none" />
+
+<!-- 업로드 모달 -->
+<div id="upload-modal">
+  <div id="upload-box">
+    <p id="upload-status">업로드 중...</p>
+    <div id="upload-progress" style="display:none">
+      <div id="upload-track"><div id="upload-bar"></div></div>
+    </div>
+    <button id="upload-cancel">닫기</button>
+  </div>
+</div>
+
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

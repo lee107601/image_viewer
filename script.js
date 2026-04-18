@@ -9,39 +9,63 @@ const FIREBASE_CONFIG = {
 };
 
 firebase.initializeApp(FIREBASE_CONFIG);
-const db = firebase.firestore();
+const db      = firebase.firestore();
+const storage = firebase.storage();
 
 /* ── DOM ── */
-const gallery    = document.getElementById('gallery');
-const toolbar    = document.getElementById('toolbar');
-const statusEl   = document.getElementById('status');
-const countEl    = document.getElementById('count');
-const headerCnt  = document.getElementById('header-count');
-const lightbox   = document.getElementById('lightbox');
-const lbImg      = document.getElementById('lb-img');
-const lbTitle    = document.getElementById('lb-title');
-const lbCounter  = document.getElementById('lb-counter');
-const lbComments = document.getElementById('lb-comments');
-const lbName     = document.getElementById('lb-name');
-const lbMsg      = document.getElementById('lb-msg');
-const lbSend     = document.getElementById('lb-send');
+const gallery      = document.getElementById('gallery');
+const toolbar      = document.getElementById('toolbar');
+const statusEl     = document.getElementById('status');
+const countEl      = document.getElementById('count');
+const headerCnt    = document.getElementById('header-count');
+const lightbox     = document.getElementById('lightbox');
+const lbImg        = document.getElementById('lb-img');
+const lbTitle      = document.getElementById('lb-title');
+const lbCounter    = document.getElementById('lb-counter');
+const lbComments   = document.getElementById('lb-comments');
+const lbName       = document.getElementById('lb-name');
+const lbMsg        = document.getElementById('lb-msg');
+const lbSend       = document.getElementById('lb-send');
+const uploadModal  = document.getElementById('upload-modal');
+const uploadInput  = document.getElementById('upload-input');
+const uploadProgress = document.getElementById('upload-progress');
+const uploadBar    = document.getElementById('upload-bar');
+const uploadStatus = document.getElementById('upload-status');
 
-let photos  = [];
-let lbIndex = 0;
-let unsubFn = null;
+let staticPhotos   = [];   // photos.json 기반
+let uploadedPhotos = [];   // Firestore uploads 컬렉션
+let photos         = [];   // 병합된 최종 목록
+let lbIndex        = 0;
+let unsubFn        = null;
 
-/* ── 사진 로드 ── */
+/* ── 초기화 ── */
 async function init() {
+  // 정적 사진 로드
   try {
     const res = await fetch('photos.json');
-    if (!res.ok) throw new Error();
-    const list = await res.json();
-    photos = list.map(name => ({ src: 'photos/' + name, thumb: 'thumbs/' + name, name }));
-    statusEl.classList.add('hidden');
-    renderGallery();
-  } catch {
-    statusEl.innerHTML = '<p style="color:#f76aa8">⚠ photos.json 파일이 없습니다.<br><small>make.bat 을 실행해 사진 목록을 생성하세요.</small></p>';
-  }
+    if (res.ok) {
+      const list = await res.json();
+      staticPhotos = list.map(name => ({
+        src: 'photos/' + name, thumb: 'thumbs/' + name, name, type: 'static'
+      }));
+    }
+  } catch { /* photos.json 없어도 계속 진행 */ }
+
+  // 업로드된 사진 실시간 구독
+  db.collection('uploads').orderBy('ts', 'desc').onSnapshot(snap => {
+    uploadedPhotos = snap.docs.map(doc => {
+      const d = doc.data();
+      return { src: d.src, thumb: d.thumb, name: d.name, type: 'upload', id: doc.id };
+    });
+    mergeAndRender();
+  });
+
+  statusEl.classList.add('hidden');
+}
+
+function mergeAndRender() {
+  photos = [...uploadedPhotos, ...staticPhotos];
+  renderGallery();
 }
 
 function renderGallery() {
@@ -54,8 +78,8 @@ function renderGallery() {
     const card = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `
-      <img src="${img.thumb}" alt="${img.name}" loading="lazy" />
-      <div class="card-overlay"><div class="card-name">${img.name}</div></div>
+      <img src="${img.thumb}" alt="${esc(img.name)}" loading="lazy" />
+      <div class="card-overlay"><div class="card-name">${esc(img.name)}</div></div>
       <div class="card-badge" id="badge-${i}">💬 <span>0</span></div>`;
     card.querySelector('img').onload = e => e.target.classList.add('loaded');
     card.addEventListener('click', () => openLightbox(i));
@@ -74,12 +98,8 @@ function loadBadge(name, i) {
     .onSnapshot(snap => {
       const badge = document.getElementById('badge-' + i);
       if (!badge) return;
-      if (snap.size > 0) {
-        badge.querySelector('span').textContent = snap.size;
-        badge.classList.add('visible');
-      } else {
-        badge.classList.remove('visible');
-      }
+      badge.querySelector('span').textContent = snap.size;
+      badge.classList.toggle('visible', snap.size > 0);
     });
 }
 
@@ -91,6 +111,101 @@ document.querySelectorAll('.cols-btn button').forEach(btn => {
     gallery.className = 'cols-' + btn.dataset.cols;
   });
 });
+
+/* ── 업로드 ── */
+function compressImage(file, maxPx, quality = 0.82) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > maxPx || h > maxPx) {
+        if (w >= h) { h = Math.round(h * maxPx / w); w = maxPx; }
+        else        { w = Math.round(w * maxPx / h); h = maxPx; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob(resolve, 'image/jpeg', quality);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+document.getElementById('fab').addEventListener('click', () => {
+  uploadInput.click();
+});
+
+uploadInput.addEventListener('change', async e => {
+  const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
+  if (!files.length) return;
+  uploadInput.value = '';
+
+  uploadModal.classList.add('open');
+  uploadProgress.style.display = 'block';
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    uploadStatus.textContent = `업로드 중... (${i + 1}/${files.length}) ${file.name}`;
+    setBar(0);
+
+    try {
+      const key = `${Date.now()}_${file.name.replace(/[^\w.\-]/g, '_')}`;
+
+      // 클라이언트에서 압축
+      const [thumbBlob, fullBlob] = await Promise.all([
+        compressImage(file, 600),
+        compressImage(file, 1800, 0.88),
+      ]);
+      setBar(20);
+
+      // 썸네일 업로드
+      const thumbRef = storage.ref(`thumbs/${key}`);
+      await thumbRef.put(thumbBlob, { contentType: 'image/jpeg' });
+      const thumbUrl = await thumbRef.getDownloadURL();
+      setBar(60);
+
+      // 원본 업로드
+      const fullRef = storage.ref(`photos/${key}`);
+      await fullRef.put(fullBlob, { contentType: 'image/jpeg' });
+      const fullUrl = await fullRef.getDownloadURL();
+      setBar(90);
+
+      // Firestore 저장
+      await db.collection('uploads').add({
+        src: fullUrl, thumb: thumbUrl,
+        name: file.name,
+        ts: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      setBar(100);
+
+    } catch (err) {
+      uploadStatus.textContent = `오류: ${err.message}`;
+      await delay(2000);
+    }
+  }
+
+  uploadStatus.textContent = `완료! ${files.length}장 업로드됨 🐾`;
+  setBar(100);
+  await delay(1200);
+  closeUploadModal();
+});
+
+function setBar(pct) {
+  uploadBar.style.width = pct + '%';
+}
+
+function delay(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+function closeUploadModal() {
+  uploadModal.classList.remove('open');
+  uploadProgress.style.display = 'none';
+  uploadBar.style.width = '0%';
+  uploadStatus.textContent = '';
+}
+
+document.getElementById('upload-cancel').addEventListener('click', closeUploadModal);
 
 /* ── 키 인코딩 ── */
 function encodeKey(name) {
@@ -132,8 +247,7 @@ function subscribeComments(photoName) {
   lbComments.innerHTML = '<div class="comment-loading"><div class="spinner"></div></div>';
 
   unsubFn = db.collection('photos').doc(encodeKey(photoName))
-    .collection('comments')
-    .orderBy('ts', 'asc')
+    .collection('comments').orderBy('ts', 'asc')
     .onSnapshot(snap => {
       if (snap.empty) {
         lbComments.innerHTML = '<p class="comment-empty">아직 메시지가 없어요.<br>첫 메시지를 남겨보세요 🐾</p>';
