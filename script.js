@@ -63,7 +63,7 @@ async function init() {
   db.collection('uploads').orderBy('ts', 'desc').onSnapshot(snap => {
     uploadedPhotos = snap.docs.map(doc => {
       const d = doc.data();
-      return { src: d.src, thumb: d.thumb, name: d.name, type: 'upload', id: doc.id };
+      return { src: d.src, thumb: d.thumb, name: d.name, mediaType: d.mediaType || 'image', type: 'upload', id: doc.id };
     });
     mergeAndRender();
   });
