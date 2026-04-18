@@ -85,12 +85,19 @@ function renderGallery() {
   sorted.forEach((img, i) => {
     const card = document.createElement('div');
     card.className = 'card';
+    const isVideo = img.mediaType === 'video';
+    const mediaEl = isVideo
+      ? `<video src="${cloudinaryVideoPreview(img.src)}" autoplay muted loop playsinline></video>`
+      : `<img src="${img.thumb}" alt="${esc(img.name)}" loading="lazy" />`;
     card.innerHTML = `
-      <img src="${img.thumb}" alt="${esc(img.name)}" loading="lazy" />
+      ${mediaEl}
       <div class="card-overlay"><div class="card-name">${esc(img.name)}</div></div>
-      <div class="card-badge" id="badge-${i}">💬 <span>0</span></div>
-      ${img.mediaType === 'video' ? '<div class="card-play">▶</div>' : ''}`;
-    card.querySelector('img').onload = e => e.target.classList.add('loaded');
+      <div class="card-badge" id="badge-${i}">💬 <span>0</span></div>`;
+    if (isVideo) {
+      card.querySelector('video').addEventListener('canplay', e => e.target.classList.add('loaded'));
+    } else {
+      card.querySelector('img').onload = e => e.target.classList.add('loaded');
+    }
     card.addEventListener('click', () => openLightbox(i));
     gallery.appendChild(card);
     loadBadge(img.name, i);
@@ -154,6 +161,10 @@ function cloudinaryVideoThumb(url) {
   return url
     .replace('/video/upload/', '/video/upload/w_600,c_limit,q_80,f_auto,so_0/')
     .replace(/\.[^.]+$/, '.jpg');
+}
+
+function cloudinaryVideoPreview(url) {
+  return url.replace('/upload/', '/upload/w_400,c_limit,q_30,vc_auto/');
 }
 
 function uploadToCloudinary(file) {
@@ -293,6 +304,8 @@ function showLb() {
   if (isVideo) {
     lbVideo.src = img.src;
     lbVideo.poster = img.thumb;
+    lbVideo.load();
+    lbVideo.play().catch(() => {});
   } else {
     lbImg.src = img.thumb;
     lbImg.style.filter = 'blur(4px)';

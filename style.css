@@ -94,8 +94,8 @@ header h1 { font-size: 1.15rem; font-weight: 700; }
   .card:hover .card-overlay { opacity: 1; }
   .card-overlay { opacity: 0; }
 }
-.card img { display: block; width: 100%; height: auto; opacity: 0; transition: opacity .4s; }
-.card img.loaded { opacity: 1; }
+.card img, .card video { display: block; width: 100%; height: auto; opacity: 0; transition: opacity .4s; }
+.card img.loaded, .card video.loaded { opacity: 1; }
 .card-overlay {
   position: absolute; inset: 0;
   background: linear-gradient(to top, rgba(0,0,0,.8) 0%, transparent 50%);
@@ -103,18 +103,6 @@ header h1 { font-size: 1.15rem; font-weight: 700; }
   padding: .75rem; transition: opacity .2s; opacity: .5;
 }
 .card-name { font-size: .72rem; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-/* 동영상 카드 플레이 버튼 */
-.card-play {
-  position: absolute; top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  width: 46px; height: 46px; border-radius: 50%;
-  background: rgba(0,0,0,.6);
-  color: #fff; font-size: 1.25rem;
-  display: grid; place-items: center;
-  pointer-events: none;
-  backdrop-filter: blur(2px);
-}
 
 /* 댓글 뱃지 */
 .card-badge {
