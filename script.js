@@ -87,14 +87,17 @@ function renderGallery() {
     card.className = 'card';
     const isVideo = img.mediaType === 'video';
     const mediaEl = isVideo
-      ? `<video src="${cloudinaryVideoPreview(img.src)}" autoplay muted loop playsinline></video>`
+      ? `<video poster="${img.thumb}" autoplay muted loop playsinline></video>`
       : `<img src="${img.thumb}" alt="${esc(img.name)}" loading="lazy" />`;
     card.innerHTML = `
       ${mediaEl}
       <div class="card-overlay"><div class="card-name">${esc(img.name)}</div></div>
       <div class="card-badge" id="badge-${i}">💬 <span>0</span></div>`;
     if (isVideo) {
-      card.querySelector('video').addEventListener('canplay', e => e.target.classList.add('loaded'));
+      const v = card.querySelector('video');
+      v.addEventListener('canplay', e => e.target.classList.add('loaded'));
+      v.addEventListener('error', () => { if (v.src !== img.src) v.src = img.src; });
+      v.src = cloudinaryVideoPreview(img.src);
     } else {
       card.querySelector('img').onload = e => e.target.classList.add('loaded');
     }
