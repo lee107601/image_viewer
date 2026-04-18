@@ -114,9 +114,12 @@ document.querySelectorAll('.cols-btn button').forEach(btn => {
 
 /* ── 업로드 ── */
 function compressImage(file, maxPx, quality = 0.82) {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
     const img = new Image();
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(`이미지 로드 실패: ${file.name}`)); };
     img.onload = () => {
+      URL.revokeObjectURL(url);
       let w = img.width, h = img.height;
       if (w > maxPx || h > maxPx) {
         if (w >= h) { h = Math.round(h * maxPx / w); w = maxPx; }
@@ -125,9 +128,26 @@ function compressImage(file, maxPx, quality = 0.82) {
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      canvas.toBlob(resolve, 'image/jpeg', quality);
+      canvas.toBlob(blob => {
+        if (blob) resolve(blob);
+        else reject(new Error('이미지 압축 실패'));
+      }, 'image/jpeg', quality);
     };
-    img.src = URL.createObjectURL(file);
+    img.src = url;
+  });
+}
+
+function uploadToStorage(ref, blob) {
+  return new Promise((resolve, reject) => {
+    const task = ref.put(blob, { contentType: 'image/jpeg' });
+    task.on('state_changed',
+      snap => {
+        const pct = Math.round(snap.bytesTransferred / snap.totalBytes * 100);
+        setBar(pct);
+      },
+      err => reject(err),
+      () => resolve(task.snapshot.ref.getDownloadURL())
+    );
   });
 }
 
@@ -143,32 +163,29 @@ uploadInput.addEventListener('change', async e => {
   uploadModal.classList.add('open');
   uploadProgress.style.display = 'block';
 
+  let successCount = 0;
+
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    uploadStatus.textContent = `업로드 중... (${i + 1}/${files.length}) ${file.name}`;
+    uploadStatus.textContent = `(${i + 1}/${files.length}) 압축 중... ${file.name}`;
     setBar(0);
 
     try {
       const key = `${Date.now()}_${file.name.replace(/[^\w.\-]/g, '_')}`;
 
-      // 클라이언트에서 압축
+      // 압축
       const [thumbBlob, fullBlob] = await Promise.all([
         compressImage(file, 600),
         compressImage(file, 1800, 0.88),
       ]);
-      setBar(20);
 
       // 썸네일 업로드
-      const thumbRef = storage.ref(`thumbs/${key}`);
-      await thumbRef.put(thumbBlob, { contentType: 'image/jpeg' });
-      const thumbUrl = await thumbRef.getDownloadURL();
-      setBar(60);
+      uploadStatus.textContent = `(${i + 1}/${files.length}) 썸네일 업로드 중...`;
+      const thumbUrl = await uploadToStorage(storage.ref(`thumbs/${key}`), thumbBlob);
 
       // 원본 업로드
-      const fullRef = storage.ref(`photos/${key}`);
-      await fullRef.put(fullBlob, { contentType: 'image/jpeg' });
-      const fullUrl = await fullRef.getDownloadURL();
-      setBar(90);
+      uploadStatus.textContent = `(${i + 1}/${files.length}) 원본 업로드 중...`;
+      const fullUrl = await uploadToStorage(storage.ref(`photos/${key}`), fullBlob);
 
       // Firestore 저장
       await db.collection('uploads').add({
@@ -176,18 +193,25 @@ uploadInput.addEventListener('change', async e => {
         name: file.name,
         ts: firebase.firestore.FieldValue.serverTimestamp()
       });
+
+      successCount++;
       setBar(100);
 
     } catch (err) {
-      uploadStatus.textContent = `오류: ${err.message}`;
-      await delay(2000);
+      console.error('업로드 실패:', err);
+      const msg = err.code === 'storage/unauthorized'
+        ? 'Firebase Storage 규칙을 허용으로 변경하세요.'
+        : err.message;
+      uploadStatus.textContent = `⚠ 오류: ${msg}`;
+      await delay(3000);
     }
   }
 
-  uploadStatus.textContent = `완료! ${files.length}장 업로드됨 🐾`;
-  setBar(100);
-  await delay(1200);
-  closeUploadModal();
+  if (successCount > 0) {
+    uploadStatus.textContent = `완료! ${successCount}장 업로드됨 🐾`;
+    await delay(1200);
+    closeUploadModal();
+  }
 });
 
 function setBar(pct) {
