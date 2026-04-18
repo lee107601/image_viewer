@@ -182,7 +182,7 @@ document.getElementById('fab').addEventListener('click', () => {
 });
 
 uploadInput.addEventListener('change', async e => {
-  const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
+  const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'));
   if (!files.length) return;
   uploadInput.value = '';
 
